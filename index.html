@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deals CRM Kanban</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<style>
+  .glass {
+    backdrop-filter: blur(10px);
+    background: rgba(255,255,255,0.1);
+  }
+  .card {
+    cursor: grab;
+  }
+  .shake {
+    animation: shake 0.4s;
+  }
+  @keyframes shake {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    50% { transform: translateX(5px); }
+    75% { transform: translateX(-5px); }
+    100% { transform: translateX(0); }
+  }
+</style>
+</head>
+
+<body class="bg-gradient-to-br from-indigo-900 to-purple-900 text-white min-h-screen p-6">
+
+<h1 class="text-3xl font-bold mb-6 text-center">💼 Deals CRM Kanban</h1>
+
+<div class="flex justify-center mb-6">
+  <button onclick="openModal()" class="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg shadow-lg">
+    ➕ Add Deal
+  </button>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+
+  <!-- Columns -->
+  <div class="glass p-4 rounded-xl" ondrop="drop(event,'new')" ondragover="allowDrop(event)">
+    <h2 class="text-xl font-bold mb-2">New</h2>
+    <div id="new" class="space-y-2"></div>
+  </div>
+
+  <div class="glass p-4 rounded-xl" ondrop="drop(event,'progress')" ondragover="allowDrop(event)">
+    <h2 class="text-xl font-bold mb-2">In Progress</h2>
+    <div id="progress" class="space-y-2"></div>
+  </div>
+
+  <div class="glass p-4 rounded-xl" ondrop="drop(event,'success')" ondragover="allowDrop(event)">
+    <h2 class="text-xl font-bold mb-2">Success</h2>
+    <div id="success" class="space-y-2"></div>
+  </div>
+
+  <div class="glass p-4 rounded-xl" ondrop="drop(event,'failure')" ondragover="allowDrop(event)">
+    <h2 class="text-xl font-bold mb-2">Failure</h2>
+    <div id="failure" class="space-y-2"></div>
+  </div>
+
+</div>
+
+<!-- Modal -->
+<div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
+  <div class="bg-white text-black p-6 rounded-lg w-80">
+    <h2 class="text-xl mb-4">Deal</h2>
+    <input id="title" placeholder="Title" class="w-full mb-2 p-2 border rounded"/>
+    <textarea id="desc" placeholder="Description" class="w-full mb-2 p-2 border rounded"></textarea>
+    <button onclick="saveDeal()" class="bg-blue-500 text-white px-4 py-2 rounded">Save</button>
+    <button onclick="closeModal()" class="ml-2">Cancel</button>
+  </div>
+</div>
+
+<!-- Sounds -->
+<audio id="successSound" src="https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3"></audio>
+<audio id="failSound" src="https://assets.mixkit.co/sfx/preview/mixkit-error-tone-2870.mp3"></audio>
+<audio id="addSound" src="https://assets.mixkit.co/sfx/preview/mixkit-positive-interface-beep-221.mp3"></audio>
+<audio id="deleteSound" src="https://assets.mixkit.co/sfx/preview/mixkit-click-error-1110.mp3"></audio>
+
+<script>
+
+let deals = JSON.parse(localStorage.getItem("deals")) || [];
+let editId = null;
+
+function saveToStorage() {
+  localStorage.setItem("deals", JSON.stringify(deals));
+}
+
+function render() {
+  ["new","progress","success","failure"].forEach(col => {
+    document.getElementById(col).innerHTML = "";
+  });
+
+  deals.forEach(deal => {
+    const div = document.createElement("div");
+    div.className = "card bg-white text-black p-3 rounded shadow";
+    div.draggable = true;
+    div.ondragstart = (e)=>drag(e, deal.id);
+
+    div.innerHTML = `
+      <h3 class="font-bold">${deal.title}</h3>
+      <p class="text-sm">${deal.desc}</p>
+      <div class="flex justify-end gap-2 mt-2">
+        <button onclick="editDeal('${deal.id}')" class="text-blue-500">✏️</button>
+        <button onclick="deleteDeal('${deal.id}')" class="text-red-500">🗑</button>
+      </div>
+    `;
+
+    document.getElementById(deal.column).appendChild(div);
+  });
+}
+
+function drag(ev, id) {
+  ev.dataTransfer.setData("id", id);
+}
+
+function allowDrop(ev) {
+  ev.preventDefault();
+}
+
+function drop(ev, column) {
+  ev.preventDefault();
+  const id = ev.dataTransfer.getData("id");
+
+  const deal = deals.find(d => d.id === id);
+  deal.column = column;
+
+  if(column === "success") {
+    confetti();
+    document.getElementById("successSound").play();
+  }
+
+  if(column === "failure") {
+    const el = ev.target;
+    el.classList.add("shake","ring-4","ring-red-500");
+    document.getElementById("failSound").play();
+    setTimeout(()=> el.classList.remove("shake","ring-4","ring-red-500"), 600);
+  }
+
+  saveToStorage();
+  render();
+}
+
+function openModal() {
+  document.getElementById("modal").classList.remove("hidden");
+}
+
+function closeModal() {
+  document.getElementById("modal").classList.add("hidden");
+  editId = null;
+}
+
+function saveDeal() {
+  const title = document.getElementById("title").value;
+  const desc = document.getElementById("desc").value;
+
+  if(editId) {
+    const deal = deals.find(d=>d.id===editId);
+    deal.title = title;
+    deal.desc = desc;
+  } else {
+    deals.push({
+      id: Date.now().toString(),
+      title,
+      desc,
+      column: "new"
+    });
+    document.getElementById("addSound").play();
+  }
+
+  saveToStorage();
+  render();
+  closeModal();
+}
+
+function editDeal(id) {
+  const deal = deals.find(d=>d.id===id);
+  document.getElementById("title").value = deal.title;
+  document.getElementById("desc").value = deal.desc;
+  editId = id;
+  openModal();
+}
+
+function deleteDeal(id) {
+  deals = deals.filter(d=>d.id!==id);
+  document.getElementById("deleteSound").play();
+  saveToStorage();
+  render();
+}
+
+// Init
+render();
+
+</script>
+
+</body>
+</html>
